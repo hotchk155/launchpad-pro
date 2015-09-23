@@ -3,10 +3,11 @@ BUILDDIR = build
 TOOLS = tools
 
 SOURCES += src/app.c
+SOURCES += src/metastep.c
 
 INCLUDES += -Iinclude -I
 
-LIB = lib/launchpad_pro.a
+LIB = lib/launchpad_pro.a 
 
 OBJECTS = $(addprefix $(BUILDDIR)/, $(addsuffix .o, $(basename $(SOURCES))))
 

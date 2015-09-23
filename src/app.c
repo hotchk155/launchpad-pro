@@ -1,5 +1,6 @@
+#if 0
 /******************************************************************************
- 
+
  Copyright (c) 2015, Focusrite Audio Engineering Ltd.
  All rights reserved.
  
@@ -41,6 +42,7 @@
 //
 // This is where the fun is!  Add your code to the callbacks below to define how
 // your app behaves.
+
 //______________________________________________________________________________
 
 void app_surface_event(u8 type, u8 index, u8 value)
@@ -150,3 +152,5 @@ void app_init()
 		}
 	}
 }
+
+#endif
