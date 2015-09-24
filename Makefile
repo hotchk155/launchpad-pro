@@ -2,7 +2,7 @@ BUILDDIR = build
 
 TOOLS = tools
 
-SOURCES += src/app.c
+SOURCES += src/sequencer.c
 SOURCES += src/metastep.c
 
 INCLUDES += -Iinclude -I
