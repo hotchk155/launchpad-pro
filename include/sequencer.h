@@ -77,14 +77,31 @@ typedef enum {
 } MNU_BUTTON;
 
 /*
+ * Logical channels which get mapped to real MIDI channels
+ */
+typedef enum {
+	LCHAN_A,
+	LCHAN_B
+} LCHAN;
+
+
+typedef enum {
+	EVENT_NONE = 0,
+	EVENT_TICK,
+	EVENT_STEP,
+	EVENT_START,
+	EVENT_STOP,
+	EVENT_RESET,
+	EVENT_REPAINT,
+} SQ_EVENT;
+
+/*
  * types for callback functions that each sequencer sketch
  * needs to implement
  */
 typedef void(*SqInitFunc)(void *this);
 typedef void(*SqDoneFunc)(void *this);
-typedef void(*SqTickFunc)(void *this);
-typedef void(*SqStepFunc)(void *this);
-typedef void(*SqRedrawFunc)(void *this);
+typedef void(*SqEventFunc)(void *this, SQ_EVENT event);
 typedef void(*SqGridPressFunc)(void *this, byte row, byte col, byte press);
 typedef void(*SqMenuButtonFunc)(void *this, MNU_BUTTON which, byte press);
 
@@ -95,13 +112,10 @@ typedef void(*SqMenuButtonFunc)(void *this, MNU_BUTTON which, byte press);
 typedef struct _SQ_HANDLERS {
 	SqInitFunc				init;
 	SqDoneFunc				done;
-	SqTickFunc				tick;
-	SqStepFunc				step;
-	SqRedrawFunc			redraw;
+	SqEventFunc				event;
 	SqGridPressFunc			gridButton;
 	SqMenuButtonFunc		menuButton;
 } SQ_HANDLERS;
-
 typedef SQ_HANDLERS* PSEQUENCER;
 
 /*
@@ -109,5 +123,9 @@ typedef SQ_HANDLERS* PSEQUENCER;
  */
 extern void gridLed(int row, int col, COLOUR colour);
 extern void menuLed(MNU_BUTTON button, COLOUR colour);
+extern void playNote(LCHAN lchan, byte note, byte velocity, unsigned duration);
+extern void stopNote(LCHAN lchan, byte note);
+extern void stopNotes();
+
 
 #endif /* SEQUENCER_H_ */

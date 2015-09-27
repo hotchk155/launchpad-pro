@@ -14,9 +14,7 @@
  */
 static void seqInit(void *ptr);
 static void seqDone(void *ptr);
-static void seqTick(void *ptr);
-static void seqStep(void *ptr);
-static void seqRedraw(void *ptr);
+static void seqEvent(void *ptr, SQ_EVENT event);
 static void seqGridButton(void *ptr, byte row, byte col, byte press);
 static void seqMenuButton(void *ptr, MNU_BUTTON which, byte press);
 
@@ -45,9 +43,16 @@ typedef struct _SEQ_TYPE {
 	SQ_HANDLERS handlers;
 	int stepNumber;
 	byte shiftKey;
-	byte redNote;
-	byte greenNote;
 	byte counter;
+
+	byte redNote;
+	byte redVelocity;
+	unsigned redDuration;
+
+	byte greenNote;
+	byte greenVelocity;
+	unsigned greenDuration;
+
 	CELL_TYPE grid[8][8];
 } SEQ_TYPE;
 
@@ -55,9 +60,10 @@ typedef struct _SEQ_TYPE {
  * Assign various menu buttons to sequencer functions
  */
 enum {
-	SHIFT_YELLOW = MNU_ARROW5,
-	SHIFT_GREEN = MNU_ARROW6,
-	SHIFT_RED = MNU_ARROW7
+	SHIFT_YELLOW = MNU_ARROW4,
+	SHIFT_GREEN = MNU_ARROW5,
+	SHIFT_RED = MNU_ARROW6,
+	SHIFT_DEL = MNU_ARROW7
 };
 
 /*
@@ -70,9 +76,7 @@ static SEQ_TYPE seqInstance = {
 				// The handler functions
 				seqInit,
 				seqDone,
-				seqTick,
-				seqStep,
-				seqRedraw,
+				seqEvent,
 				seqGridButton,
 				seqMenuButton
 		},
@@ -99,12 +103,6 @@ static void findNextNote(SEQ_TYPE *this, byte isRed) {
 	byte lastNote = isRed ? this->redNote : this->greenNote;
 	byte mask = isRed ? SEQ_RED : SEQ_GREEN;
 
-	// scan over the keyboard part of the display from lower
-	// notes up to higher ones
-	if(lastNote) {
-		hal_send_midi(DINMIDI, 0x90, lastNote, 0x00);
-	}
-
 	for(int y=5; y>0 && !nextNote; y-=2  ) {
 		for(int x=0; x<16; ++x) {
 			int col = x/2;
@@ -130,11 +128,12 @@ static void findNextNote(SEQ_TYPE *this, byte isRed) {
 		nextNote->ping = 0xFF;
 		if(isRed) {
 			this->redNote = nextNote->note;
+			playNote(LCHAN_A, this->redNote, this->redVelocity, this->redDuration);
 		}
 		else {
 			this->greenNote = nextNote->note;
+			playNote(LCHAN_B, this->greenNote, this->greenVelocity, this->greenDuration);
 		}
-		hal_send_midi(DINMIDI, 0x90, nextNote->note, 0x7F);
 	}
 }
 
@@ -199,10 +198,16 @@ static void seqInit(void *ptr) {
 	menuLed(SHIFT_YELLOW, COLOUR_YELLOW);
 	menuLed(SHIFT_RED, COLOUR_RED);
 	menuLed(SHIFT_GREEN, COLOUR_GREEN);
+	menuLed(SHIFT_DEL, COLOUR_WHITE);
 	int baseNote = 24;
 	initNotes(this, 4, baseNote);
 	initNotes(this, 2, baseNote + 12);
 	initNotes(this, 0, baseNote + 24);
+
+	this->redVelocity = 0x7F;
+	this->redDuration = 100;
+	this->greenVelocity = 0x7F;
+	this->greenDuration = 100;
 
 }
 
@@ -216,55 +221,48 @@ static void seqDone(void *ptr) {
 /*
  * Handler called every millisecond
  */
-static void seqTick(void *ptr) {
+static void seqEvent(void *ptr, SQ_EVENT event) {
 	SEQ_TYPE *this = (SEQ_TYPE *)ptr;
-	++this->counter;
-	if(!(this->counter & 0x3F)) {
-		for(int row=0; row < 8; ++row) {
-			for(int col=0; col< 8; ++col) {
-				if(this->grid[row][col].ping) {
-					this->grid[row][col].ping/=2;
-					updateGridLed(this, row, col);
+
+	switch(event) {
+	case EVENT_TICK:
+		++this->counter;
+		if(!(this->counter & 0x3F)) {
+			for(int row=0; row < 8; ++row) {
+				for(int col=0; col< 8; ++col) {
+					if(this->grid[row][col].ping) {
+						this->grid[row][col].ping/=2;
+						updateGridLed(this, row, col);
+					}
 				}
 			}
+		}
+		break;
+	case EVENT_STEP:
+		{
+			// move the step marker
+			int s = this->stepNumber;
+			if(++this->stepNumber >= 16) {
+				this->stepNumber = 0;
+			}
+			updateGridLed(this, 6 + s/8, s%8);
+
+			byte row = 6 + this->stepNumber/8;
+			byte col = this->stepNumber%8;
+			updateGridLed(this, row, col);
+
+
+			if(this->grid[row][col].flags & SEQ_RED) {
+				findNextNote(this, TRUE);
+			}
+			if(this->grid[row][col].flags & SEQ_GREEN) {
+				findNextNote(this, FALSE);
+			}
+			break;
 		}
 	}
 }
 
-/*
- * Handler called every "step" (beat)
- */
-static void seqStep(void *ptr) {
-	SEQ_TYPE *this = (SEQ_TYPE *)ptr;
-
-	// move the step marker
-	int s = this->stepNumber;
-	if(++this->stepNumber >= 16) {
-		this->stepNumber = 0;
-	}
-	updateGridLed(this, 6 + s/8, s%8);
-
-	byte row = 6 + this->stepNumber/8;
-	byte col = this->stepNumber%8;
-	updateGridLed(this, row, col);
-
-
-	if(this->grid[row][col].flags & SEQ_RED) {
-		findNextNote(this, TRUE);
-	}
-	if(this->grid[row][col].flags & SEQ_GREEN) {
-		findNextNote(this, FALSE);
-	}
-
-
-}
-
-/*
- * Handler called to fully redraw the sequencer
- */
-static void seqRedraw(void *ptr) {
-	//SEQ_TYPE *this = (SEQ_TYPE *)ptr;
-}
 
 /*
  * Handler when a menu button is pressed
@@ -275,6 +273,7 @@ static void seqMenuButton(void *ptr, MNU_BUTTON which, byte press) {
 		case SHIFT_YELLOW:
 		case SHIFT_GREEN:
 		case SHIFT_RED:
+		case SHIFT_DEL:
 			this->shiftKey = press? which : 0;
 			break;
 		default:
@@ -292,7 +291,7 @@ static void seqGridButton(void *ptr, byte row, byte col, byte press) {
 		if(row>=6 || (*pflags&SEQ_NOTE))
 		switch(this->shiftKey) {
 		case SHIFT_YELLOW:
-			if((*pflags & SEQ_YELLOW)==SEQ_YELLOW) {
+			if((*pflags & SEQ_YELLOW) == SEQ_YELLOW) {
 				*pflags&=~SEQ_YELLOW;
 			}
 			else {
@@ -300,15 +299,37 @@ static void seqGridButton(void *ptr, byte row, byte col, byte press) {
 			}
 			break;
 		case SHIFT_GREEN:
-			*pflags^=SEQ_GREEN;
+			if((*pflags & SEQ_YELLOW) == SEQ_GREEN) {
+				*pflags&=~SEQ_YELLOW;
+			}
+			else {
+				*pflags&=~SEQ_RED;
+				*pflags|=SEQ_GREEN;
+			}
 			break;
 		case SHIFT_RED:
-			*pflags^=SEQ_RED;
+			if((*pflags & SEQ_YELLOW) == SEQ_RED) {
+				*pflags&=~SEQ_YELLOW;
+			}
+			else {
+				*pflags&=~SEQ_GREEN;
+				*pflags|=SEQ_RED;
+			}
+			break;
+		case SHIFT_DEL:
+			*pflags&=~(SEQ_GREEN|SEQ_RED);
 			break;
 		default:
-			*pflags&=~(SEQ_GREEN|SEQ_RED);
+			if(*pflags&SEQ_NOTE) {
+				playNote(LCHAN_A, this->grid[row][col].note, press, 0);
+				this->grid[row][col].ping = 255;
+			}
 			break;
 		}
 		updateGridLed(this, row, col);
+
+	}
+	else if(*pflags&SEQ_NOTE) {
+		stopNote(LCHAN_A, this->grid[row][col].note);
 	}
 }
